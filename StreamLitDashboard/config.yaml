@@ -1,0 +1,11 @@
+credentials:
+  usernames:
+    admin:
+      email: admin@example.com
+      name: Admin User
+      password: "1234"   # can hash later
+
+cookie:
+  expiry_days: 1
+  key: "random_signature_key"
+  name: "server_patching_dashboard"
