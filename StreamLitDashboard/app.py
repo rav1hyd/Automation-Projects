@@ -13,7 +13,7 @@ import streamlit_authenticator as stauth
 st.set_page_config(page_title="Server Patching Dashboard", layout="wide")
 
 # --- Load credentials from YAML ---
-with open("StreamLitDashboard\config.yaml") as file:
+with open("StreamLitDashboard/config.yaml") as file:
     config = yaml.load(file, Loader=SafeLoader)
 
 authenticator = stauth.Authenticate(
