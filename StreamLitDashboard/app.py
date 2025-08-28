@@ -16,6 +16,7 @@ st.set_page_config(page_title="Server Patching Dashboard", layout="wide")
 with open("StreamLitDashboard/config.yaml") as file:
     config = yaml.load(file, Loader=SafeLoader)
 
+
 authenticator = stauth.Authenticate(
     config['credentials'],
     config['cookie']['name'],
