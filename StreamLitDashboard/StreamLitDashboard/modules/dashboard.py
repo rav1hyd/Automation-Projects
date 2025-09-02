@@ -4,32 +4,28 @@ from io import BytesIO
 from datetime import datetime
 from modules.utils import status_badge
 
-
 def show_summary(df):
-    """Show KPIs and compliance gauge across all modules."""
+    """Show KPIs and compliance gauge."""
     total = len(df)
-
-    ok_count = (df["Status"] == "OK").sum()
-    changed_count = (df["Status"] == "Changed").sum()
-    error_count = df["Status"].str.contains("Error", na=False).sum()
-    pending_count = (df["Status"] == "Pending").sum()
-
-    compliance = (ok_count / total * 100) if total > 0 else 0
+    patched = (df["Status"] == "Patched").sum()
+    failed = (df["Status"] == "Failed").sum()
+    conn_issues = (df["Status"] == "Connectivity Issue").sum()
+    pending = (df["Status"] == "Pending").sum()
+    compliance = (patched / total * 100) if total > 0 else 0
 
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Total Checks", total)
-    col2.metric("✅ OK", ok_count)
-    col3.metric("♻️ Changed", changed_count)
-    col4.metric("❌ Errors", error_count)
-    col5.metric("⏳ Pending", pending_count)
+    col1.metric("Total Servers", total)
+    col2.metric("✅ Patched", patched)
+    col3.metric("❌ Failed", failed)
+    col4.metric("⚠️ Connectivity", conn_issues)
+    col5.metric("⏳ Pending", pending)
 
     st.caption(f"Last run: {st.session_state.get('last_run', 'N/A')}")
 
-    # Gauge for compliance %
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=compliance,
-        title={"text": "Health Compliance %"},
+        title={"text": "Patch Compliance %"},
         gauge={
             "axis": {"range": [0, 100]},
             "bar": {"color": "green"},
@@ -42,48 +38,35 @@ def show_summary(df):
     ))
     st.plotly_chart(fig, use_container_width=True)
 
-
 def show_filter(df):
-    """Filter results by Module / OS / Status."""
+    """Unified filter for OS & Status."""
     st.subheader("🔎 Filter View")
-
-    module_options = df["Module"].unique().tolist()
-    os_options = df["OS Type"].dropna().unique().tolist()
-    status_options = df["Status"].unique().tolist()
-
-    selected = st.multiselect(
-        "Filter by Module / OS / Status",
-        module_options + os_options + status_options,
-    )
-
+    options = st.multiselect("Filter by OS / Status", 
+                             df["OS Type"].unique().tolist() + df["Status"].unique().tolist())
+    
     df_filtered = df.copy()
-    if selected:
+    if options:
         df_filtered = df_filtered[
-            df_filtered["Module"].isin(selected) |
-            df_filtered["OS Type"].isin(selected) |
-            df_filtered["Status"].isin(selected)
+            df_filtered["OS Type"].isin(options) | df_filtered["Status"].isin(options)
         ]
 
     df_display = df_filtered.copy()
     df_display["Status"] = df_display["Status"].apply(status_badge)
-
     st.markdown(
         df_display.to_html(escape=False, index=False),
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )
-
     return df_filtered
 
-
 def show_download(df):
-    """Allow user to download results Excel."""
+    """Download updated Excel."""
     buffer = BytesIO()
     df.to_excel(buffer, index=False)
     buffer.seek(0)
     st.download_button(
-        "⬇️ Download Results Excel",
+        "⬇️ Download Updated Excel",
         data=buffer,
-        file_name=f"healthcheck_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+        file_name=f"updated_servers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True,
     )
