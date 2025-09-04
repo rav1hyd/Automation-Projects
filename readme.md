@@ -134,7 +134,3 @@ http://<VM-Public-IP>:8501
 | TM1Ubuntu  | ✅ Healthy| Linux   | TM1Ubuntu  | All checks passed ✅                    |
 | WinServer1 | ❌ Error  | Windows | WinServer1 | • Connectivity: Timeout<br>• Logs: N/A |
 
----
-
-## 👨‍💻 Author
-Built with ❤️ for automating server health checks and reporting.
