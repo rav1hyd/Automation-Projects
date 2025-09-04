@@ -5,7 +5,7 @@ from yaml.loader import SafeLoader
 import streamlit_authenticator as stauth
 
 from modules.file_handler import load_excel
-from modules.dashboard import show_summary, show_filter, show_download
+from modules.dashboard import  show_results_with_filters, show_download
 from main_runner import run_all
 
 # --- Page Config ---
@@ -52,9 +52,9 @@ if st.session_state["authentication_status"]:
         if "results_df" in st.session_state:
             results_df = st.session_state["results_df"]
 
-            show_summary(results_df)
-            filtered = show_filter(results_df)
-            show_download(filtered)
+          
+            condensed = show_results_with_filters(results_df)  # single table with live filters
+            show_download(condensed)
 
 # --- Auth failures ---
 elif st.session_state["authentication_status"] is False:

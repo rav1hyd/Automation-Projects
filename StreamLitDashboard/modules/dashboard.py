@@ -2,86 +2,89 @@ import streamlit as st
 import plotly.graph_objects as go
 from io import BytesIO
 from datetime import datetime
-from modules.utils import status_badge
+import pandas as pd
 
+def build_condensed(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per host: Hostname | Status | OS Type | Output | Details."""
+    rows = []
+    for host in df["Hostname"].unique():
+        host_df = df[df["Hostname"] == host]
 
-def show_summary(df):
-    """Show KPIs and compliance gauge across all modules."""
-    total = len(df)
+        # OS Type
+        os_vals = host_df["OS Type"].dropna().unique()
+        os_type = os_vals[0] if len(os_vals) else "Unknown"
 
-    ok_count = (df["Status"] == "OK").sum()
-    changed_count = (df["Status"] == "Changed").sum()
-    error_count = df["Status"].str.contains("Error", na=False).sum()
-    pending_count = (df["Status"] == "Pending").sum()
+        # overall status
+        all_ok = (host_df["Status"] == "OK").all()
+        any_error = host_df["Status"].astype(str).str.contains("Error", na=False).any()
+        overall = "OK" if all_ok else ("Error" if any_error else "Pending")
 
-    compliance = (ok_count / total * 100) if total > 0 else 0
+        # representative output (SSH Executor if present)
+        if "SSH Executor" in host_df["Module"].values:
+            out_vals = host_df.loc[host_df["Module"]=="SSH Executor","Output"].astype(str).values
+            output = out_vals[0] if len(out_vals) else ""
+        else:
+            output = ""
 
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Total Checks", total)
-    col2.metric("✅ OK", ok_count)
-    col3.metric("♻️ Changed", changed_count)
-    col4.metric("❌ Errors", error_count)
-    col5.metric("⏳ Pending", pending_count)
+        # details: list only non-OK modules
+        issues = []
+        for _, r in host_df.iterrows():
+            s = str(r["Status"])
+            if s == "OK":
+                continue
+            if s == "Pending" or "Error" in s or "failed" in s.lower():
+                short = s.replace("Connection failed:", "").strip()
+                issues.append(f"• {r['Module']}: {short or 'Issue'}")
+        details = "All checks passed ✅" if not issues else "\n".join(issues)
 
-    st.caption(f"Last run: {st.session_state.get('last_run', 'N/A')}")
+        rows.append({
+            "Hostname": host,
+            "Status": overall,
+            "OS Type": os_type,
+            "Output": output,
+            "Details": details,
+        })
+    return pd.DataFrame(rows)
 
-    # Gauge for compliance %
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=compliance,
-        title={"text": "Health Compliance %"},
-        gauge={
-            "axis": {"range": [0, 100]},
-            "bar": {"color": "green"},
-            "steps": [
-                {"range": [0, 50], "color": "red"},
-                {"range": [50, 80], "color": "orange"},
-                {"range": [80, 100], "color": "green"},
-            ],
-        }
-    ))
-    st.plotly_chart(fig, use_container_width=True)
+def show_results_with_filters(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Single widget: filters on top, table below (shows all by default).
+    Returns filtered condensed dataframe.
+    """
+    st.subheader("📊 Results")
 
+    condensed = build_condensed(df)
 
-def show_filter(df):
-    """Filter results by Module / OS / Status."""
-    st.subheader("🔎 Filter View")
+    # --- filters (default = all selected) ---
+    c1, c2, c3 = st.columns([1,1,2])
+    os_options = sorted([x for x in condensed["OS Type"].dropna().unique().tolist()])
+    status_options = sorted(condensed["Status"].unique().tolist())
+    # user sees all rows initially
+    sel_os = c1.multiselect("Filter by OS Type", os_options, default=os_options)
+    sel_status = c2.multiselect("Filter by Status", status_options, default=status_options)
+    # optional quick search by host
+    q = c3.text_input("Search Hostname", "")
 
-    module_options = df["Module"].unique().tolist()
-    os_options = df["OS Type"].dropna().unique().tolist()
-    status_options = df["Status"].unique().tolist()
+    # if user clears everything, treat as 'all'
+    if not sel_os: sel_os = os_options
+    if not sel_status: sel_status = status_options
 
-    selected = st.multiselect(
-        "Filter by Module / OS / Status",
-        module_options + os_options + status_options,
-    )
+    filtered = condensed[
+        condensed["OS Type"].isin(sel_os) &
+        condensed["Status"].isin(sel_status)
+    ]
+    if q.strip():
+        filtered = filtered[filtered["Hostname"].str.contains(q.strip(), case=False, na=False)]
 
-    df_filtered = df.copy()
-    if selected:
-        df_filtered = df_filtered[
-            df_filtered["Module"].isin(selected) |
-            df_filtered["OS Type"].isin(selected) |
-            df_filtered["Status"].isin(selected)
-        ]
-
-    df_display = df_filtered.copy()
-    df_display["Status"] = df_display["Status"].apply(status_badge)
-
-    st.markdown(
-        df_display.to_html(escape=False, index=False),
-        unsafe_allow_html=True,
-    )
-
-    return df_filtered
-
+    st.dataframe(filtered, use_container_width=True)
+    return filtered
 
 def show_download(df):
-    """Allow user to download results Excel."""
     buffer = BytesIO()
     df.to_excel(buffer, index=False)
     buffer.seek(0)
     st.download_button(
-        "⬇️ Download Results Excel",
+        "⬇️ Download Results (Excel)",
         data=buffer,
         file_name=f"healthcheck_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
